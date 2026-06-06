@@ -286,11 +286,20 @@ const toSymbol = (input) => {
 
 const fromSymbol = (sym) => sym.replace(/\.T$/i, "");
 
+
+  // CORSプロキシ経由でAlpha Vantage APIを呼ぶ
+  const avFetch = async (avUrl) => {
+    const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(avUrl)}`;
+    const r = await fetch(proxied);
+    if (!r.ok) throw new Error('fetch_error');
+    return r.json();
+  };
+
 async function avSearchSymbol(query, apiKey) {
   // SYMBOL_SEARCH で候補を取得
   const sym = toSymbol(query);
   // まず直接 GLOBAL_QUOTE を試す
-  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
+  const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
   const res = await fetch(url);
   const data = await res.json();
 
@@ -303,16 +312,14 @@ async function avSearchSymbol(query, apiKey) {
 
   // 見つからない場合は SYMBOL_SEARCH を試す
   const searchUrl = `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=${encodeURIComponent(query)}&apikey=${apiKey}`;
-  const sres = await fetch(searchUrl);
-  const sdata = await sres.json();
+  const sdata = await avFetch(searchUrl);
 
   if (sdata.bestMatches && sdata.bestMatches.length > 0) {
     const best = sdata.bestMatches[0];
     const foundSym = best["1. symbol"];
     // 見つかったシンボルで再度 GLOBAL_QUOTE
     const url2 = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(foundSym)}&apikey=${apiKey}`;
-    const r2 = await fetch(url2);
-    const d2 = await r2.json();
+    const d2 = await avFetch(url2);
     if (d2["Global Quote"] && d2["Global Quote"]["05. price"]) {
       const q = d2["Global Quote"];
       return { symbol: foundSym, name: best["2. name"] || foundSym, price: parseFloat(q["05. price"]), change: parseFloat(q["09. change"] || 0), changePct: q["10. change percent"] || "0%" };
@@ -325,7 +332,7 @@ async function avSearchSymbol(query, apiKey) {
 }
 
 async function avGetPrice(symbol, apiKey) {
-  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`;
+  const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`;
   const res = await fetch(url);
   const data = await res.json();
   if (data["Note"] || data["Information"]) throw new Error("rate_limit");
@@ -404,7 +411,8 @@ function ApiKeySetup({ onSave }) {
     if (!k) { setErr("APIキーを入力してください"); return; }
     setTesting(true); setErr("");
     try {
-      const res = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=IBM&apikey=${k}`);
+      const avUrl = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=IBM&apikey=${k}`;
+      const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(avUrl)}`);
       const data = await res.json();
       if (data["Note"] || data["Information"]) {
         setErr("レート制限中です。少し待ってから再試行してください。");
